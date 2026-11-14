@@ -6,7 +6,9 @@ import android.app.usage.UsageStatsManager
 import android.content.Context
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Process
+import android.provider.Settings
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
@@ -24,11 +26,22 @@ data class AppUsageSession(val packageName: String, val eventType: String, val t
 class TelemetryHelper(private val context: Context) {
 
     companion object {
-        // PASTE YOUR FIREBASE REALTIME DATABASE URL BELOW (keep "/tablet_report.json" at the end)
-        const val FIREBASE_DB_URL = "https://studytracker-b3c55-default-rtdb.firebaseio.com/tablet_report.json"
+        // PASTE YOUR BASE FIREBASE URL BELOW (No slash "/" or ".json" at the end!)
+        // Example: "https://studytracker-12345-default-rtdb.firebaseio.com"
+        const val FIREBASE_BASE_URL = "https://studytracker-b3c55-default-rtdb.firebaseio.com"
     }
 
     private val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+
+    // Generates a unique folder name for THIS specific tablet (e.g., "SM_X200_98f1a2")
+    fun getUniqueTabletId(): String {
+        val androidId = Settings.Secure.getString(
+            context.contentResolver,
+            Settings.Secure.ANDROID_ID
+        ) ?: "unknown"
+        val cleanModel = Build.MODEL.replace(Regex("[^a-zA-Z0-9]"), "_")
+        return "${cleanModel}_${androidId.take(6)}"
+    }
 
     fun hasUsageStatsPermission(): Boolean {
         val appOps = context.getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager
@@ -73,7 +86,7 @@ class TelemetryHelper(private val context: Context) {
             .sortedByDescending { it.totalMinutes }
     }
 
-    // 3. App Open/Close Timestamps (Last 6 Hours)
+    // 3. App Open/Close Timestamps (Last 24 Hours, Ignoring Home Screen Clutter)
     fun getRecentAppEvents(hoursBack: Long = 24): List<AppUsageSession> {
         val usm = context.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
         val endTime = System.currentTimeMillis()
@@ -85,6 +98,11 @@ class TelemetryHelper(private val context: Context) {
 
         while (usageEvents.hasNextEvent()) {
             usageEvents.getNextEvent(event)
+            if (event.packageName == "com.sec.android.app.launcher" ||
+                event.packageName == "com.android.systemui"
+            ) {
+                continue
+            }
             if (event.eventType == UsageEvents.Event.ACTIVITY_RESUMED ||
                 event.eventType == UsageEvents.Event.ACTIVITY_PAUSED
             ) {
@@ -105,9 +123,10 @@ class TelemetryHelper(private val context: Context) {
         return eventList.asReversed()
     }
 
-    // Build formatted text report for on-screen display
+    // Build formatted text report for on-screen display (shows Tablet ID at the very top!)
     fun buildFormattedTextReport(): String {
         val sb = StringBuilder()
+        sb.append("📱 TABLET ID: ${getUniqueTabletId()}\n")
         sb.append("Last Synced: ${dateFormat.format(Date())}\n\n")
 
         if (!hasUsageStatsPermission()) {
@@ -115,11 +134,11 @@ class TelemetryHelper(private val context: Context) {
             sb.append("Tap Button 1 above and enable Usage Access.\n\n")
         } else {
             sb.append("=== 1. SCREEN TIME (LAST 24H) ===\n")
-            getDailyScreenTime().take(15).forEach {
+            getDailyScreenTime().take(50).forEach {
                 sb.append("• ${it.packageName}: ${it.totalMinutes} mins\n")
             }
 
-            sb.append("\n=== 2. APP TIMESTAMPS (LAST 6H) ===\n")
+            sb.append("\n=== 2. APP TIMESTAMPS (LAST 24H) ===\n")
             getRecentAppEvents().take(200).forEach {
                 sb.append("• [${it.timestamp}] ${it.packageName} (${it.eventType})\n")
             }
@@ -127,9 +146,9 @@ class TelemetryHelper(private val context: Context) {
 
         sb.append("\n=== 3. BROWSER DOMAINS VISITED ===\n")
         if (DomainMonitorVpnService.loggedDomains.isEmpty()) {
-            sb.append("No domains logged yet. Start VPN and browse.\n")
+            sb.append("No domains logged yet.\n")
         } else {
-            DomainMonitorVpnService.loggedDomains.take(30).forEach {
+            DomainMonitorVpnService.loggedDomains.take(100).forEach {
                 sb.append("• $it\n")
             }
         }
@@ -142,31 +161,36 @@ class TelemetryHelper(private val context: Context) {
         return sb.toString()
     }
 
-    // Push structured JSON report to Firebase Realtime Database
+    // Push structured JSON report to this tablet's dedicated Firebase folder
     fun syncReportToFirebase(onComplete: ((Boolean) -> Unit)? = null) {
         thread(start = true) {
             try {
-                if (FIREBASE_DB_URL.contains("YOUR-PROJECT-ID")) {
+                if (FIREBASE_BASE_URL.contains("YOUR-PROJECT-ID")) {
                     onComplete?.invoke(false)
                     return@thread
                 }
 
+                val deviceFolder = getUniqueTabletId()
+                val cleanBaseUrl = FIREBASE_BASE_URL.trimEnd('/')
+
                 val payload = JSONObject().apply {
+                    put("tabletId", deviceFolder)
                     put("lastUpdated", dateFormat.format(Date()))
                     put("usagePermissionActive", hasUsageStatsPermission())
-                    put("screenTimeLast24h", JSONArray(getDailyScreenTime().take(20).map {
+                    put("screenTimeLast24h", JSONArray(getDailyScreenTime().take(100).map {
                         "${it.packageName}: ${it.totalMinutes} mins"
                     }))
                     put("recentAppEvents", JSONArray(getRecentAppEvents().take(300).map {
                         "[${it.timestamp}] ${it.packageName} -> ${it.eventType}"
                     }))
-                    put("visitedDomains", JSONArray(DomainMonitorVpnService.loggedDomains.take(50)))
+                    put("visitedDomains", JSONArray(DomainMonitorVpnService.loggedDomains.take(200)))
                     put("installedUserApps", JSONArray(getInstalledApps().filter { !it.isSystemApp }.map {
                         "${it.appName} (${it.packageName})"
                     }))
                 }
 
-                val url = URL(FIREBASE_DB_URL)
+                // Sends data to: /tablets/SM_X200_98f1a2.json
+                val url = URL("$cleanBaseUrl/tablets/$deviceFolder.json")
                 val conn = url.openConnection() as HttpURLConnection
                 conn.requestMethod = "PUT"
                 conn.setRequestProperty("Content-Type", "application/json; charset=UTF-8")
