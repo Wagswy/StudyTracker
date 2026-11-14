@@ -74,7 +74,7 @@ class TelemetryHelper(private val context: Context) {
     }
 
     // 3. App Open/Close Timestamps (Last 6 Hours)
-    fun getRecentAppEvents(hoursBack: Long = 6): List<AppUsageSession> {
+    fun getRecentAppEvents(hoursBack: Long = 24): List<AppUsageSession> {
         val usm = context.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
         val endTime = System.currentTimeMillis()
         val startTime = endTime - TimeUnit.HOURS.toMillis(hoursBack)
@@ -120,7 +120,7 @@ class TelemetryHelper(private val context: Context) {
             }
 
             sb.append("\n=== 2. APP TIMESTAMPS (LAST 6H) ===\n")
-            getRecentAppEvents().take(20).forEach {
+            getRecentAppEvents().take(200).forEach {
                 sb.append("• [${it.timestamp}] ${it.packageName} (${it.eventType})\n")
             }
         }
@@ -157,7 +157,7 @@ class TelemetryHelper(private val context: Context) {
                     put("screenTimeLast24h", JSONArray(getDailyScreenTime().take(20).map {
                         "${it.packageName}: ${it.totalMinutes} mins"
                     }))
-                    put("recentAppEvents", JSONArray(getRecentAppEvents().take(30).map {
+                    put("recentAppEvents", JSONArray(getRecentAppEvents().take(300).map {
                         "[${it.timestamp}] ${it.packageName} -> ${it.eventType}"
                     }))
                     put("visitedDomains", JSONArray(DomainMonitorVpnService.loggedDomains.take(50)))
