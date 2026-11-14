@@ -3,15 +3,10 @@
     xmlns:tools="http://schemas.android.com/tools"
     package="com.example.studytracker">
 
-    <!-- 1. Permission to list all installed apps -->
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"
         tools:ignore="QueryAllPackagesPermission" />
-
-    <!-- 2 & 3. Permission to read screen time and app launch timestamps -->
     <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS"
         tools:ignore="ProtectedPermissions" />
-
-    <!-- 4. Permissions for persistent foreground notification & network sync -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
@@ -32,18 +27,28 @@
             </intent-filter>
         </activity>
 
-        <!-- Local DNS-Monitoring VPN Service -->
+        <!-- Standard Foreground Service for 5-Min Cloud Auto-Sync (No VPN required) -->
         <service
             android:name=".DomainMonitorVpnService"
             android:exported="false"
-            android:foregroundServiceType="specialUse"
-            android:permission="android.permission.BIND_VPN_SERVICE">
-            <intent-filter>
-                <action android:name="android.net.VpnService" />
-            </intent-filter>
+            android:foregroundServiceType="specialUse">
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="On-device DNS domain logging for student accountability" />
+                android:value="Periodic study telemetry sync" />
+        </service>
+
+        <!-- Accessibility Service to read Browser Address Bar URLs without VPN -->
+        <service
+            android:name=".BrowserUrlService"
+            android:exported="false"
+            android:label="Study Browser URL Logger"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibility_config" />
         </service>
 
     </application>
