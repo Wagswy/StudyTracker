@@ -165,7 +165,12 @@ class TelemetryHelper(private val context: Context) {
     }
 
     // Network upload to Firebase Realtime Database
-    fun syncReportToFirebase(onComplete: ((Boolean) -> Unit)? = null) {
+    // Replace syncReportToFirebase in TelemetryHelper.kt with this version:
+    fun syncReportToFirebase(
+        tamperAlert: String = "OK - Normal",
+        accessibilityActive: Boolean = true,
+        onComplete: ((Boolean) -> Unit)? = null
+    ) {
         thread(start = true) {
             try {
                 if (FIREBASE_BASE_URL.contains("YOUR-PROJECT-ID")) {
@@ -175,11 +180,23 @@ class TelemetryHelper(private val context: Context) {
 
                 val deviceFolder = getUniqueTabletId()
                 val cleanBaseUrl = FIREBASE_BASE_URL.trimEnd('/')
+                val usageGranted = hasUsageStatsPermission()
+
+                // Automatically flag if Usage Access was revoked after setup
+                val finalStatus = when {
+                    tamperAlert != "OK - Normal" -> tamperAlert
+                    !usageGranted -> "⚠️ ALERT: Usage Access Permission Revoked!"
+                    !accessibilityActive -> "⚠️ ALERT: Accessibility Service Disabled!"
+                    else -> "🟢 ACTIVE"
+                }
 
                 val payload = JSONObject().apply {
                     put("tabletId", deviceFolder)
+                    put("status", finalStatus)
                     put("lastUpdated", dateFormat.format(Date()))
-                    put("usagePermissionActive", hasUsageStatsPermission())
+                    put("lastUpdatedEpoch", System.currentTimeMillis())
+                    put("usagePermissionActive", usageGranted)
+                    put("accessibilityActive", accessibilityActive)
                     put("screenTimeLast24h", JSONArray(getDailyScreenTime().take(100).map {
                         "${it.packageName}: ${it.totalMinutes} mins"
                     }))
@@ -213,4 +230,3 @@ class TelemetryHelper(private val context: Context) {
             }
         }
     }
-}
