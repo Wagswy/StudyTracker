@@ -27,7 +27,7 @@ class TelemetryHelper(private val context: Context) {
 
     companion object {
         // Replace with your Firebase Realtime Database URL (No trailing slash or .json)
-        const val FIREBASE_BASE_URL = "https://YOUR-PROJECT-ID-default-rtdb.firebaseio.com"
+        const val FIREBASE_BASE_URL = "https://studytracker-b3c55-default-rtdb.firebaseio.com"
     }
 
     private val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
