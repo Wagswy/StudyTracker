@@ -26,13 +26,12 @@ data class AppUsageSession(val packageName: String, val eventType: String, val t
 class TelemetryHelper(private val context: Context) {
 
     companion object {
-        // Replace with your Firebase Realtime Database URL (No trailing slash or .json)
+        // PASTE YOUR BASE FIREBASE URL BELOW (No trailing slash "/" or ".json")
         const val FIREBASE_BASE_URL = "https://studytracker-b3c55-default-rtdb.firebaseio.com"
     }
 
     private val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
 
-    // Generates a unique folder name per tablet (e.g., "SM_X200_98f1a2")
     fun getUniqueTabletId(): String {
         val androidId = Settings.Secure.getString(
             context.contentResolver,
@@ -42,7 +41,6 @@ class TelemetryHelper(private val context: Context) {
         return "${cleanModel}_${androidId.take(6)}"
     }
 
-    // Verify if the user granted special Usage Access in Settings
     fun hasUsageStatsPermission(): Boolean {
         val appOps = context.getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager
         val mode = appOps.checkOpNoThrow(
@@ -53,7 +51,6 @@ class TelemetryHelper(private val context: Context) {
         return mode == AppOpsManager.MODE_ALLOWED
     }
 
-    // 1. Installed User and System Applications
     fun getInstalledApps(): List<InstalledApp> {
         val pm = context.packageManager
         val packages = pm.getInstalledApplications(PackageManager.GET_META_DATA)
@@ -67,7 +64,6 @@ class TelemetryHelper(private val context: Context) {
         }.sortedBy { it.appName }
     }
 
-    // 2. Daily Screen Time per application (Past 24 Hours)
     fun getDailyScreenTime(): List<AppScreenTime> {
         val usm = context.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
         val endTime = System.currentTimeMillis()
@@ -86,7 +82,6 @@ class TelemetryHelper(private val context: Context) {
             .sortedByDescending { it.totalMinutes }
     }
 
-    // 3. App Open/Close Timestamps (Past 24 Hours, excluding Launcher noise)
     fun getRecentAppEvents(hoursBack: Long = 24): List<AppUsageSession> {
         val usm = context.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
         val endTime = System.currentTimeMillis()
@@ -99,7 +94,6 @@ class TelemetryHelper(private val context: Context) {
         while (usageEvents.hasNextEvent()) {
             usageEvents.getNextEvent(event)
 
-            // Skip home screen launcher and system navigation clutter
             if (event.packageName == "com.sec.android.app.launcher" ||
                 event.packageName == "com.android.systemui"
             ) {
@@ -123,10 +117,9 @@ class TelemetryHelper(private val context: Context) {
                 )
             }
         }
-        return eventList.asReversed() // Most recent first
+        return eventList.asReversed()
     }
 
-    // Local report string used when viewing directly inside the app
     fun buildFormattedTextReport(): String {
         val sb = StringBuilder()
         sb.append("📱 TABLET ID: ${getUniqueTabletId()}\n")
@@ -138,7 +131,7 @@ class TelemetryHelper(private val context: Context) {
         } else {
             sb.append("=== 1. SCREEN TIME (LAST 24H) ===\n")
             getDailyScreenTime().take(50).forEach {
-                sb.append("• ${it.packageName}: ${it.totalMinutes} mins\n")
+                sb.append("• ${it.packageName}:${it.totalMinutes} mins\n")
             }
 
             sb.append("\n=== 2. APP TIMESTAMPS (LAST 24H) ===\n")
@@ -164,8 +157,6 @@ class TelemetryHelper(private val context: Context) {
         return sb.toString()
     }
 
-    // Network upload to Firebase Realtime Database
-    // Replace syncReportToFirebase in TelemetryHelper.kt with this version:
     fun syncReportToFirebase(
         tamperAlert: String = "OK - Normal",
         accessibilityActive: Boolean = true,
@@ -182,7 +173,6 @@ class TelemetryHelper(private val context: Context) {
                 val cleanBaseUrl = FIREBASE_BASE_URL.trimEnd('/')
                 val usageGranted = hasUsageStatsPermission()
 
-                // Automatically flag if Usage Access was revoked after setup
                 val finalStatus = when {
                     tamperAlert != "OK - Normal" -> tamperAlert
                     !usageGranted -> "⚠️ ALERT: Usage Access Permission Revoked!"
@@ -198,10 +188,10 @@ class TelemetryHelper(private val context: Context) {
                     put("usagePermissionActive", usageGranted)
                     put("accessibilityActive", accessibilityActive)
                     put("screenTimeLast24h", JSONArray(getDailyScreenTime().take(100).map {
-                        "${it.packageName}: ${it.totalMinutes} mins"
+                        "${it.packageName}:${it.totalMinutes} mins"
                     }))
                     put("recentAppEvents", JSONArray(getRecentAppEvents().take(300).map {
-                        "[${it.timestamp}] ${it.packageName} -> ${it.eventType}"
+                        "[${it.timestamp}] ${it.packageName} ->${it.eventType}"
                     }))
                     put("visitedDomains", JSONArray(BrowserUrlService.loggedDomains.take(200)))
                     put("installedUserApps", JSONArray(getInstalledApps().filter { !it.isSystemApp }.map {
@@ -230,3 +220,4 @@ class TelemetryHelper(private val context: Context) {
             }
         }
     }
+}
