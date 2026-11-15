@@ -1,7 +1,6 @@
 package com.example.studytracker
 
 import android.content.Intent
-import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.widget.Button
@@ -20,9 +19,6 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         telemetryHelper = TelemetryHelper(this)
 
-        // Automatically start the 5-minute cloud sync service on app launch
-        startAutoSyncService()
-
         val rootLayout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(32, 32, 32, 32)
@@ -35,15 +31,15 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        val btnEnableUrlLogger = Button(this).apply {
-            text = "2. Enable Browser URL Logger (Accessibility)"
+        val btnEnableAccessibility = Button(this).apply {
+            text = "2. Enable Background Engine (Accessibility)"
             setOnClickListener {
                 startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
             }
         }
 
         val btnRefreshAndSync = Button(this).apply {
-            text = "3. Refresh Screen & Sync to Cloud Now"
+            text = "3. Refresh Screen & Sync Now"
             setOnClickListener {
                 renderAndSync()
             }
@@ -59,7 +55,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         rootLayout.addView(btnGrantUsage)
-        rootLayout.addView(btnEnableUrlLogger)
+        rootLayout.addView(btnEnableAccessibility)
         rootLayout.addView(btnRefreshAndSync)
         rootLayout.addView(scrollView)
 
@@ -67,20 +63,11 @@ class MainActivity : AppCompatActivity() {
         renderAndSync()
     }
 
-    private fun startAutoSyncService() {
-        val serviceIntent = Intent(this, DomainMonitorVpnService::class.java)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(serviceIntent)
-        } else {
-            startService(serviceIntent)
-        }
-    }
-
     private fun renderAndSync() {
         outputText.text = telemetryHelper.buildFormattedTextReport()
         telemetryHelper.syncReportToFirebase { success ->
             runOnUiThread {
-                val msg = if (success) "Synced to Firebase Cloud!" else "Local view updated"
+                val msg = if (success) "Synced to Cloud!" else "Local view updated"
                 Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
             }
         }
