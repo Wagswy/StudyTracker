@@ -143,7 +143,15 @@ class BrowserUrlService : AccessibilityService() {
     }
 
     override fun onInterrupt() {}
-
+    override fun onUnbind(intent: android.content.Intent?): Boolean {
+        handler.removeCallbacks(syncRunnable)
+        // Fire an immediate emergency packet before Android closes the service
+        TelemetryHelper(applicationContext).syncReportToFirebase(
+            tamperAlert = "🚨 CRITICAL: Accessibility Service Turned OFF by User!",
+            accessibilityActive = false
+        )
+        return super.onUnbind(intent)
+    }
     override fun onDestroy() {
         handler.removeCallbacks(syncRunnable)
         super.onDestroy()
